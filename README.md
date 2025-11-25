@@ -1,29 +1,41 @@
 ### Twitch Steam Key Bot
+
 Bot for scaping twitch chats for steam keys and redeem them.
 
 install node modules
+
 ```
 npm install
 ```
 
-Enter the names of channels you wish to read the chat of.
+Create .env file with 3 main keys
+
 ```
-const client = new tmi.client({
-  channels:['#channel']
-})
+channels=streamerchannelname
+highlightNickNames=username;
+doNotDispalyNickNames=username;
 ```
 
-Enter the names of user you wish to highlight in chat.
+In .env enter the names of channels you wish to read the chat of.
+
 ```
-const highlightNickNames = ["#nickname"];
+channels=nick1,nick2,nick3
 ```
 
-Enter the names of user you wish to do not display in chat.
+In .env enter the names of user you wish to highlight in chat.
+
 ```
-const doNotDispalyNickNames = ["#nickname"];
+highlightNickNames=nick1,nick2,nick3;
+```
+
+In .env enter the names of user you wish to do not display in chat.
+
+```
+doNotDispalyNickNames=nick1,nick2,nick3;
 ```
 
 Run with
+
 ```
 node bot.js
 ```
