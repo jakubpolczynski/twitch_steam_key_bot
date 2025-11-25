@@ -1,14 +1,22 @@
 const tmi = require("tmi.js");
-const robot = require("robotjs");
+const { keyboard, Key } = require("@nut-tree-fork/nut-js");
+const dotenv = require("dotenv");
 
 const { spawn } = require("child_process");
 
 const client = new tmi.client({
-  channels: ["channel"],
+  channels: [dotenv.config().parsed.channels],
 });
 
-const highlightNickNames = [nickname];
-const doNotDispalyNickNames = [nickname];
+const highlightNickNames = dotenv
+  .config()
+  .parsed.highlightNickNames.concat()
+  .split(",");
+
+const doNotDispalyNickNames = dotenv
+  .config()
+  .parsed.doNotDispalyNickNames.concat()
+  .split(",");
 
 client.connect();
 client.on("message", onMessageHandler);
@@ -18,14 +26,14 @@ const re2 = new RegExp(
   "[A-z0-9]{4,6}-[A-z0-9]{4,6}-[A-z0-9]{4,6}-[A-z0-9]{4,6}-[A-z0-9]{4,6}"
 );
 
-function onMessageHandler(target, context, msg, self) {
+async function onMessageHandler(target, context, msg, self) {
   if (self) {
     return;
   }
   const commandName = msg.trim();
   const result = re2.exec(commandName) || re.exec(commandName);
   if (result) {
-    copy_key(result[0]);
+    await copy_key(result[0]);
   }
   const displayName = context["display-name"] || context.username || "unknown";
 
@@ -74,7 +82,7 @@ async function copy_key(key) {
         });
       });
 
-      pasteAndEnter();
+      await pasteAndEnter();
 
       console.log("\x1b[32m%s\x1b[0m", border);
       console.log("\x1b[34m%s\x1b[0m", "Key: " + key + " copied to clipboard.");
@@ -99,10 +107,10 @@ async function copy_key(key) {
   }
 }
 
-function pasteAndEnter() {
+async function pasteAndEnter() {
   // Ctrl + V
-  robot.keyTap("v", "control");
-
+  await keyboard.pressKey(Key.LeftControl, Key.V);
+  await keyboard.releaseKey(Key.LeftControl, Key.V);
   // Enter
-  robot.keyTap("enter");
+  await keyboard.pressKey(Key.Enter);
 }

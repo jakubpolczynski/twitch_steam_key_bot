@@ -9,7 +9,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "robotjs": "^0.6.0",
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "dotenv": "^17.2.3",
+    "node": "^25.2.1",
     "tmi.js": "^1.8.5"
   }
 }
