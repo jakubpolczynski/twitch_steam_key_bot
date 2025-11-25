@@ -27,3 +27,5 @@ Run with
 ```
 node bot.js
 ```
+
+Go to steam and open code redeem window, click on text input and wait.
