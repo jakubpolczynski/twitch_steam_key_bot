@@ -4,17 +4,11 @@ const robot = require("robotjs");
 const { spawn } = require("child_process");
 
 const client = new tmi.client({
-  channels: ["youngmulti"],
+  channels: ["channel"],
 });
 
-const highlightNickNames = [
-  "ZeUs06_pl",
-  "diables",
-  "kamilexior",
-  "Kasix",
-  "AvizoTV",
-];
-const doNotDispalyNickNames = ["StreamElements", "Fossabot"];
+const highlightNickNames = [nickname];
+const doNotDispalyNickNames = [nickname];
 
 client.connect();
 client.on("message", onMessageHandler);
