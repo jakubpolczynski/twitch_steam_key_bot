@@ -1,116 +1,114 @@
-const tmi = require("tmi.js");
-const { keyboard, Key } = require("@nut-tree-fork/nut-js");
-const dotenv = require("dotenv");
+"use strict";
 
-const { spawn } = require("child_process");
+const { parseConfig } = require("./src/config");
+const { createClipboardWriter } = require("./src/clipboard");
+const { createMessageHandler } = require("./src/message-handler");
 
-const client = new tmi.client({
-  channels: [dotenv.config().parsed.channels],
-});
-
-const highlightNickNames = dotenv
-  .config()
-  .parsed.highlightNickNames.concat()
-  .split(",");
-
-const doNotDispalyNickNames = dotenv
-  .config()
-  .parsed.doNotDispalyNickNames.concat()
-  .split(",");
-
-client.connect();
-client.on("message", onMessageHandler);
-
-const re = new RegExp("[A-z0-9]{4,5}-[A-z0-9]{4,5}-[A-z0-9]{4,5}");
-const re2 = new RegExp(
-  "[A-z0-9]{4,6}-[A-z0-9]{4,6}-[A-z0-9]{4,6}-[A-z0-9]{4,6}-[A-z0-9]{4,6}"
-);
-
-async function onMessageHandler(target, context, msg, self) {
-  if (self) {
-    return;
-  }
-  const commandName = msg.trim();
-  const result = re2.exec(commandName) || re.exec(commandName);
-  if (result) {
-    await copy_key(result[0]);
-  }
-  const displayName = context["display-name"] || context.username || "unknown";
-
-  if (doNotDispalyNickNames.includes(displayName)) return;
-
-  const isHighlight = highlightNickNames.includes(displayName);
-  const border = "------------------------------------------------";
-  const message = `${displayName} : ${commandName}`;
-
-  console.log(border);
-  if (isHighlight) {
-    console.log("\x1b[41m\x1b[37m%s\x1b[0m", message);
-  } else {
-    console.log("%s", message);
-  }
-  console.log(border);
-}
-
-async function copy_key(key) {
-  const border = "------------------------------------------------";
-
-  key = String(key).trim();
-
-  const platform = process.platform;
-
+function loadEnvironment() {
   try {
-    if (platform === "win32" || platform === "darwin" || platform === "linux") {
-      let proc;
-
-      if (platform === "win32") {
-        proc = spawn("clip", { windowsHide: true });
-      } else if (platform === "darwin") {
-        proc = spawn("pbcopy");
-      } else {
-        proc = spawn("xclip", ["-selection", "clipboard"]);
-      }
-
-      proc.stdin.write(key);
-      proc.stdin.end();
-
-      await new Promise((resolve, reject) => {
-        proc.on("error", reject);
-        proc.on("close", (code) => {
-          if (code === 0) resolve();
-          else reject(new Error("clipboard command exited with code " + code));
-        });
-      });
-
-      await pasteAndEnter();
-
-      console.log("\x1b[32m%s\x1b[0m", border);
-      console.log("\x1b[34m%s\x1b[0m", "Key: " + key + " copied to clipboard.");
-      console.log("\x1b[32m%s\x1b[0m", border);
-    } else {
-      throw new Error("Unsupported platform for clipboard command");
-    }
+    process.loadEnvFile(".env");
   } catch (error) {
-    console.log(
-      "Clipboard copy failed, falling back to typing. Reason:",
-      error && error.message
-    );
-    robot.typeString(key);
-    robot.keyTap("enter");
-
-    console.log("\x1b[32m%s\x1b[0m", border);
-    console.log(
-      "\x1b[34m%s\x1b[0m",
-      "Key: " + key + " typed instead of copied."
-    );
-    console.log("\x1b[32m%s\x1b[0m", border);
+    if (error.code !== "ENOENT") throw error;
   }
 }
 
-async function pasteAndEnter() {
-  // Ctrl + V
-  await keyboard.pressKey(Key.LeftControl, Key.V);
-  await keyboard.releaseKey(Key.LeftControl, Key.V);
-  // Enter
-  await keyboard.pressKey(Key.Enter);
+function createTwitchClient(options) {
+  // Loading this module or running the offline demo never opens a connection.
+  const { Client } = require("tmi.js");
+  return new Client(options);
 }
+
+async function main({
+  argv = process.argv.slice(2),
+  env = process.env,
+  loadEnv = loadEnvironment,
+  createClient = createTwitchClient,
+  clipboard,
+  logger = console,
+} = {}) {
+  if (argv.some((arg) => !["--preview", "--demo"].includes(arg))) {
+    throw new Error("Supported arguments: --preview, --demo");
+  }
+
+  const demo = argv.includes("--demo");
+  if (!demo) loadEnv();
+  const config = parseConfig({
+    ...env,
+    ...(demo ? { channels: "demo", IGNORE_USERS: "ignored_user" } : {}),
+    ...(demo || argv.includes("--preview") ? { BOT_MODE: "preview" } : {}),
+  });
+  const handler = createMessageHandler({
+    config,
+    // Preview does not even construct a clipboard adapter.
+    clipboard: config.mode === "clipboard" ? clipboard ?? createClipboardWriter() : undefined,
+    logger,
+  });
+  logger.log(`Mode: ${config.mode}. Keyboard automation is disabled.`);
+
+  if (demo) {
+    await handler("#demo", { username: "viewer" }, "Example: ABCDE-12345-FGHIJ", false);
+    await handler("#demo", { username: "ignored_user" }, "ZZZZZ-99999-XXXXX", false);
+    return { handler };
+  }
+
+  const client = createClient({
+    // tmi.js normalizes its array in place; keep validated config immutable.
+    channels: [...config.channels],
+    connection: { reconnect: true },
+  });
+  let stopped = false;
+  // EventEmitter does not await async listeners. Catch every rejected handler.
+  const onMessage = (...args) => {
+    void handler(...args).catch(() => logger.error("Message processing failed; no keyboard fallback."));
+  };
+  const onDisconnected = () => {
+    if (stopped) return;
+    logger.warn("Twitch disconnected; waiting for reconnection.");
+  };
+  const onError = () => logger.error("Twitch client error.");
+  client.on("message", onMessage);
+  client.on("disconnected", onDisconnected);
+  client.on("error", onError);
+
+  const removeListeners = () => {
+    client.removeListener("message", onMessage);
+    client.removeListener("disconnected", onDisconnected);
+    client.removeListener("error", onError);
+  };
+  try {
+    await client.connect();
+  } catch {
+    // tmi.js schedules its own retries. Keep message listeners attached.
+    logger.warn("Initial Twitch connection failed; waiting for library reconnection.");
+  }
+
+  return {
+    client,
+    handler,
+    async stop() {
+      if (stopped) return;
+      stopped = true;
+      client.reconnect = false;
+      removeListeners();
+      const drained = handler.stop();
+      try {
+        if (typeof client.readyState !== "function" || client.readyState() !== "CLOSED") {
+          await client.disconnect();
+        }
+      } finally {
+        await drained;
+      }
+    },
+  };
+}
+
+if (require.main === module) {
+  // Keep Node's default signal handling: Ctrl+C terminates the process, including
+  // reconnect timers owned internally by tmi.js.
+  main().catch((error) => {
+    console.error(`Startup failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { main, loadEnvironment };

@@ -1,17 +1,21 @@
 {
   "name": "twitch_steam_key_bot",
   "version": "1.0.0",
-  "description": "Bot to scrape for keys",
+  "description": "Twitch key candidate detector with safe preview and clipboard-only modes",
   "main": "bot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node bot.js",
+    "preview": "node bot.js --preview",
+    "demo": "node bot.js --demo",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@nut-tree-fork/nut-js": "^4.2.6",
-    "dotenv": "^17.2.3",
-    "node": "^25.2.1",
-    "tmi.js": "^1.8.5"
+    "tmi.js": "1.8.5"
   }
 }
